@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"time"
 
@@ -180,46 +181,42 @@ func CheckTrace(c *gin.Context) {
 	fmt.Println("get redis val : ", val)
 
 	// initialize appinsights client
-	client := appinsights.NewTelemetryClient(configs.AzureInstrumentation())
+	insightsClient := appinsights.NewTelemetryClient(configs.AzureInstrumentation())
 
 	// track redis call as dependecy trace
-	dependency := appinsights.NewRemoteDependencyTelemetry("Redis cache", "Redis", "<target>", true /* success */)
-
-	// // The result code is typically an error code or response status code
-	// dependency.ResultCode = "OK"
-
-	// // Id's can be used for correlation if the remote end is also logging
-	// // telemetry through application insights.
-	// dependency.Id = "<request id>"
-
-	// // Data may contain the exact URL hit or SQL statements
-	// dependency.Data = "MGET <args>"
-
-	// // The duration can be set directly:
-	// dependency.Duration = time.Minute
-
-	// // Properties and measurements may be set.
-	// dependency.Properties["shard-instance"] = "<name>"
-	// dependency.Measurements["data received"] = float64(len(response.data))
+	dependency := appinsights.NewRemoteDependencyTelemetry("Redis cache dep", "Redis", " 0.0.0.0:6379", true /* success */)
+	dependency.Id = requestId
+	dependency.Data = "MGET <args>"
+	dependency.Duration = time.Minute
 
 	// Submit the telemetry
-	client.Track(dependency)
+	insightsClient.Track(dependency)
 
-	// resp, err := http.Get("http://localhost:8888/call-node")
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", "http://localhost:7000/test-api", nil)
+	if err != nil {
+		fmt.Print(err.Error())
+	}
+	req.Header.Add("CorrelationID", requestId)
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Print(err.Error())
+	}
+
+	// resp, err := http.Get("http://localhost:7000/test-api")
 	// if err != nil {
 	// 	fmt.Println("err : ", err)
 	// }
 
-	// responseData, err := ioutil.ReadAll(resp.Body)
-	// if err != nil {
-	// 	fmt.Println(err)
-	// }
+	fmt.Println("resp from 7000 : ", resp)
 
-	// // dependency := appinsights.NewRemoteDependencyTelemetry("Redis cache", "Redis", "<target>", true /* success */)
+	responseData, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println("responseData : ", string(responseData))
 
-	// client := appinsights.NewTelemetryClient(configs.AzureInstrumentation())
-
-	// // track request
+	// track request
 	// startTime := time.Now()
 	// duration := time.Now().Sub(startTime)
 	// requestTrace := appinsights.NewRequestTelemetry("GET", "http://localhost:6000/check-tracee", duration, "200")
