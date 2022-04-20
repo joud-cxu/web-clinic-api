@@ -27,6 +27,7 @@ import (
 // var validate = validator.New()
 
 func Ping(c *gin.Context) {
+	fmt.Println("SS : ", c.Request.Header.Get("CorrelationID"))
 	c.JSON(http.StatusOK, responses.UserResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"message": "pong"}})
 }
 
@@ -146,10 +147,9 @@ func generateTokenPair(userEmail string) (customsturctures.TokenPair, error) {
 
 func CheckTrace(c *gin.Context) {
 
-	// define dummy data to set/get in/from redis
+	// define dummy data to set/get to/from redis
 	type testItem struct {
-		Name string `json:"name"`
-		Age  int    `json:"age"`
+		ReqId string `json:"reqid"`
 	}
 
 	// ping redis
@@ -162,9 +162,8 @@ func CheckTrace(c *gin.Context) {
 	pong, err := redisClient.Ping().Result()
 	fmt.Println(pong, err)
 
-	jsonItem, err := json.Marshal(testItem{Name: "joud", Age: 25})
-	fmt.Println("jsonItem : ", jsonItem)
-	fmt.Printf("type of jsonItem %T : \n", jsonItem)
+	requestId := c.Request.Header.Get("CorrelationID")
+	jsonItem, err := json.Marshal(testItem{ReqId: requestId})
 
 	if err != nil {
 		fmt.Println(err)

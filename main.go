@@ -15,6 +15,9 @@ func main() {
 	router := gin.Default()
 	configs.ConnectDB()
 
+	// req correlation
+	router.Use(middlewares.CorrelationIDMiddleware())
+
 	// unauthorized routes
 	routes.UnauthRoutes(router)
 
