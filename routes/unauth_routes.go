@@ -10,5 +10,6 @@ func UnauthRoutes(router *gin.Engine) {
 	router.GET("/ping", controllers.Ping)
 	router.POST("/register", controllers.RegisterUser)
 	router.POST("/login", controllers.Login)
+	router.GET("/check-trace", controllers.CheckTrace)
 	// router.POST("/refresh-token", controllers.)
 }

@@ -1,7 +1,6 @@
 package main
 
 import (
-	// "fmt"
 	// "time"
 
 	"github.com/Shaieb524/web-clinic.git/configs"

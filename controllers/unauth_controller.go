@@ -2,6 +2,8 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -10,6 +12,8 @@ import (
 	"github.com/Shaieb524/web-clinic.git/helpers"
 	"github.com/Shaieb524/web-clinic.git/models"
 	"github.com/Shaieb524/web-clinic.git/responses"
+	"github.com/go-redis/redis"
+	"github.com/microsoft/ApplicationInsights-Go/appinsights"
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
@@ -23,7 +27,7 @@ import (
 // var validate = validator.New()
 
 func Ping(c *gin.Context) {
-	c.JSON(http.StatusBadRequest, responses.UserResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"message": "pong"}})
+	c.JSON(http.StatusOK, responses.UserResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"message": "pong"}})
 }
 
 func RegisterUser(c *gin.Context) {
@@ -138,6 +142,93 @@ func generateTokenPair(userEmail string) (customsturctures.TokenPair, error) {
 	tPair = customsturctures.TokenPair{Access_Token: atoken, Refresh_Token: rtoken}
 
 	return tPair, nil
+}
+
+func CheckTrace(c *gin.Context) {
+
+	// define dummy data to set/get in/from redis
+	type testItem struct {
+		Name string `json:"name"`
+		Age  int    `json:"age"`
+	}
+
+	// ping redis
+	redisClient := redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
+		Password: "",
+		DB:       0,
+	})
+
+	pong, err := redisClient.Ping().Result()
+	fmt.Println(pong, err)
+
+	jsonItem, err := json.Marshal(testItem{Name: "joud", Age: 25})
+	fmt.Println("jsonItem : ", jsonItem)
+	fmt.Printf("type of jsonItem %T : \n", jsonItem)
+
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	err = redisClient.Set("id1", jsonItem, 0).Err()
+	if err != nil {
+		fmt.Println(err)
+	}
+	val, err := redisClient.Get("id1").Result()
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println("get redis val : ", val)
+
+	// initialize appinsights client
+	client := appinsights.NewTelemetryClient(configs.AzureInstrumentation())
+
+	// track redis call as dependecy trace
+	dependency := appinsights.NewRemoteDependencyTelemetry("Redis cache", "Redis", "<target>", true /* success */)
+
+	// // The result code is typically an error code or response status code
+	// dependency.ResultCode = "OK"
+
+	// // Id's can be used for correlation if the remote end is also logging
+	// // telemetry through application insights.
+	// dependency.Id = "<request id>"
+
+	// // Data may contain the exact URL hit or SQL statements
+	// dependency.Data = "MGET <args>"
+
+	// // The duration can be set directly:
+	// dependency.Duration = time.Minute
+
+	// // Properties and measurements may be set.
+	// dependency.Properties["shard-instance"] = "<name>"
+	// dependency.Measurements["data received"] = float64(len(response.data))
+
+	// Submit the telemetry
+	client.Track(dependency)
+
+	// resp, err := http.Get("http://localhost:8888/call-node")
+	// if err != nil {
+	// 	fmt.Println("err : ", err)
+	// }
+
+	// responseData, err := ioutil.ReadAll(resp.Body)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// }
+
+	// // dependency := appinsights.NewRemoteDependencyTelemetry("Redis cache", "Redis", "<target>", true /* success */)
+
+	// client := appinsights.NewTelemetryClient(configs.AzureInstrumentation())
+
+	// // track request
+	// startTime := time.Now()
+	// duration := time.Now().Sub(startTime)
+	// requestTrace := appinsights.NewRequestTelemetry("GET", "http://localhost:6000/check-tracee", duration, "200")
+	// requestTrace.Timestamp = time.Now()
+	// client.Track(requestTrace)
+
+	c.JSON(http.StatusOK, responses.UserResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"message": "string(responseData)"}})
+
 }
 
 // type handler struct{}
