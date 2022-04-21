@@ -3,8 +3,9 @@ package controllers
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"io/ioutil"
+
+	// "fmt"
+	// "io/ioutil"
 	"net/http"
 	"time"
 
@@ -28,7 +29,6 @@ import (
 // var validate = validator.New()
 
 func Ping(c *gin.Context) {
-	fmt.Println("SS : ", c.Request.Header.Get("CorrelationID"))
 	c.JSON(http.StatusOK, responses.UserResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"message": "pong"}})
 }
 
@@ -149,36 +149,42 @@ func generateTokenPair(userEmail string) (customsturctures.TokenPair, error) {
 func CheckTrace(c *gin.Context) {
 
 	// define dummy data to set/get to/from redis
-	type testItem struct {
+	type redisItem struct {
 		ReqId string `json:"reqid"`
 	}
 
-	// ping redis
+	type testApiResponse struct {
+		TestMessage string `json:"testmsg"`
+	}
+
 	redisClient := redis.NewClient(&redis.Options{
 		Addr:     "localhost:6379",
 		Password: "",
 		DB:       0,
 	})
 
-	pong, err := redisClient.Ping().Result()
-	fmt.Println(pong, err)
+	// ping redis
+	redisPong, err := redisClient.Ping().Result()
+	helpers.CustomLogger.Info(redisPong)
 
 	requestId := c.Request.Header.Get("CorrelationID")
-	jsonItem, err := json.Marshal(testItem{ReqId: requestId})
 
+	// store value in redis
+	jsonItem, err := json.Marshal(redisItem{ReqId: requestId})
 	if err != nil {
-		fmt.Println(err)
+		helpers.CustomLogger.Error("Error marshal redis item" + err.Error())
 	}
 
 	err = redisClient.Set("id1", jsonItem, 0).Err()
 	if err != nil {
-		fmt.Println(err)
+		helpers.CustomLogger.Error("Error setting redis item" + err.Error())
 	}
+
 	val, err := redisClient.Get("id1").Result()
 	if err != nil {
-		fmt.Println(err)
+		helpers.CustomLogger.Error("Error getting redis item" + err.Error())
 	}
-	fmt.Println("get redis val : ", val)
+	helpers.CustomLogger.Info("Value from redis : " + val)
 
 	// initialize appinsights client
 	insightsClient := appinsights.NewTelemetryClient(configs.AzureInstrumentation())
@@ -188,46 +194,44 @@ func CheckTrace(c *gin.Context) {
 	dependency.Id = requestId
 	dependency.Data = "MGET <args>"
 	dependency.Duration = time.Minute
-
-	// Submit the telemetry
 	insightsClient.Track(dependency)
 
+	// call remote api
+	startTime := time.Now()
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", "http://localhost:7000/test-api", nil)
 	if err != nil {
-		fmt.Print(err.Error())
+		helpers.CustomLogger.Error("Error requesting test api : " + err.Error())
 	}
 	req.Header.Add("CorrelationID", requestId)
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Print(err.Error())
+		helpers.CustomLogger.Error("Error calling test api : " + err.Error())
 	}
 
-	// resp, err := http.Get("http://localhost:7000/test-api")
-	// if err != nil {
-	// 	fmt.Println("err : ", err)
-	// }
+	// fmt.Println("all resp : ", resp)
+	// fmt.Printf("all resp type %T \n: ", resp)
+	// fmt.Println("Statuss  : ", resp.Status)
 
-	fmt.Println("resp from 7000 : ", resp)
+	// responseData, _ := ioutil.ReadAll(resp.Body)
+	// fmt.Println("reponsedata : ", responseData)
+	// fmt.Printf("reponsedata type %T : \n", responseData)
 
-	responseData, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Println("responseData : ", string(responseData))
+	// // var mappedRespData map[string]interface{}
+	// tstRspData := testApiResponse{}
+	// err = json.Unmarshal([]byte(responseData), &tstRspData)
+	// fmt.Println("Unmarshalled reponsedata : ", tstRspData)
+	// fmt.Printf("Unmarshalled reponsedata type %T : \n", tstRspData)
 
 	// track request
-	// startTime := time.Now()
-	// duration := time.Now().Sub(startTime)
-	// requestTrace := appinsights.NewRequestTelemetry("GET", "http://localhost:6000/check-tracee", duration, "200")
-	// requestTrace.Timestamp = time.Now()
-	// client.Track(requestTrace)
+	duration := time.Now().Sub(startTime)
+	requestTrace := appinsights.NewRequestTelemetry("GET", "http://localhost:7000/test-api", duration, resp.Status)
+	requestTrace.Timestamp = time.Now()
+	insightsClient.Track(requestTrace)
 
-	c.JSON(http.StatusOK, responses.UserResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"message": "string(responseData)"}})
+	c.JSON(http.StatusOK, responses.UserResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"message": resp.Body}})
 
 }
-
-// type handler struct{}
 
 // This is the api to refresh tokens
 // Most of the code is taken from the jwt-go package's sample codes
