@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 
-	// "fmt"
-	// "io/ioutil"
 	"net/http"
 	"time"
 
@@ -190,11 +188,13 @@ func CheckTrace(c *gin.Context) {
 	insightsClient := appinsights.NewTelemetryClient(configs.AzureInstrumentation())
 
 	// track redis call as dependecy trace
-	dependency := appinsights.NewRemoteDependencyTelemetry("Redis cache dep", "Redis", " 0.0.0.0:6379", true /* success */)
-	dependency.Id = requestId
-	dependency.Data = "MGET <args>"
-	dependency.Duration = time.Minute
-	insightsClient.Track(dependency)
+	dependencyTrace := appinsights.NewRemoteDependencyTelemetry("Redis cache dep", "Redis", " 0.0.0.0:6379", true /* success */)
+
+	helpers.CustomLogger.Info("requestId : " + requestId)
+	dependencyTrace.Id = requestId
+	dependencyTrace.Data = "MGET <args>"
+	dependencyTrace.Duration = time.Minute
+	insightsClient.Track(dependencyTrace)
 
 	// call remote api
 	startTime := time.Now()
@@ -209,23 +209,10 @@ func CheckTrace(c *gin.Context) {
 		helpers.CustomLogger.Error("Error calling test api : " + err.Error())
 	}
 
-	// fmt.Println("all resp : ", resp)
-	// fmt.Printf("all resp type %T \n: ", resp)
-	// fmt.Println("Statuss  : ", resp.Status)
-
-	// responseData, _ := ioutil.ReadAll(resp.Body)
-	// fmt.Println("reponsedata : ", responseData)
-	// fmt.Printf("reponsedata type %T : \n", responseData)
-
-	// // var mappedRespData map[string]interface{}
-	// tstRspData := testApiResponse{}
-	// err = json.Unmarshal([]byte(responseData), &tstRspData)
-	// fmt.Println("Unmarshalled reponsedata : ", tstRspData)
-	// fmt.Printf("Unmarshalled reponsedata type %T : \n", tstRspData)
-
 	// track request
 	duration := time.Now().Sub(startTime)
 	requestTrace := appinsights.NewRequestTelemetry("GET", "http://localhost:7000/test-api", duration, resp.Status)
+	requestTrace.Id = requestId
 	requestTrace.Timestamp = time.Now()
 	insightsClient.Track(requestTrace)
 
