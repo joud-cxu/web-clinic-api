@@ -6,7 +6,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func CustomLogger() *zap.Logger {
+func InitCustomLogger() *zap.Logger {
 
 	rawJSON := []byte(`{
 		"level": "debug",
@@ -32,3 +32,5 @@ func CustomLogger() *zap.Logger {
 
 	return logger
 }
+
+var CustomLogger *zap.Logger = InitCustomLogger()

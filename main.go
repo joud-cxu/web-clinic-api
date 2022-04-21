@@ -1,7 +1,6 @@
 package main
 
 import (
-	// "fmt"
 	// "time"
 
 	"github.com/Shaieb524/web-clinic.git/configs"
@@ -15,6 +14,9 @@ import (
 func main() {
 	router := gin.Default()
 	configs.ConnectDB()
+
+	// req correlation
+	router.Use(middlewares.CorrelationIDMiddleware())
 
 	// unauthorized routes
 	routes.UnauthRoutes(router)

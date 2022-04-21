@@ -16,7 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-var customLogger *zap.Logger = helpers.CustomLogger()
+var customLogger *zap.Logger = helpers.InitCustomLogger()
 
 func JWTauthentication() gin.HandlerFunc {
 	return func(c *gin.Context) {

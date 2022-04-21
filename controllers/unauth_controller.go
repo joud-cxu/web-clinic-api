@@ -2,6 +2,8 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
+
 	"net/http"
 	"time"
 
@@ -10,6 +12,8 @@ import (
 	"github.com/Shaieb524/web-clinic.git/helpers"
 	"github.com/Shaieb524/web-clinic.git/models"
 	"github.com/Shaieb524/web-clinic.git/responses"
+	"github.com/go-redis/redis"
+	"github.com/microsoft/ApplicationInsights-Go/appinsights"
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
@@ -23,7 +27,7 @@ import (
 // var validate = validator.New()
 
 func Ping(c *gin.Context) {
-	c.JSON(http.StatusBadRequest, responses.UserResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"message": "pong"}})
+	c.JSON(http.StatusOK, responses.UserResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"message": "pong"}})
 }
 
 func RegisterUser(c *gin.Context) {
@@ -140,7 +144,81 @@ func generateTokenPair(userEmail string) (customsturctures.TokenPair, error) {
 	return tPair, nil
 }
 
-// type handler struct{}
+func CheckTrace(c *gin.Context) {
+
+	// define dummy data to set/get to/from redis
+	type redisItem struct {
+		ReqId string `json:"reqid"`
+	}
+
+	type testApiResponse struct {
+		TestMessage string `json:"testmsg"`
+	}
+
+	redisClient := redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
+		Password: "",
+		DB:       0,
+	})
+
+	// ping redis
+	redisPong, err := redisClient.Ping().Result()
+	helpers.CustomLogger.Info(redisPong)
+
+	requestId := c.Request.Header.Get("CorrelationID")
+
+	// store value in redis
+	jsonItem, err := json.Marshal(redisItem{ReqId: requestId})
+	if err != nil {
+		helpers.CustomLogger.Error("Error marshal redis item" + err.Error())
+	}
+
+	err = redisClient.Set("id1", jsonItem, 0).Err()
+	if err != nil {
+		helpers.CustomLogger.Error("Error setting redis item" + err.Error())
+	}
+
+	val, err := redisClient.Get("id1").Result()
+	if err != nil {
+		helpers.CustomLogger.Error("Error getting redis item" + err.Error())
+	}
+	helpers.CustomLogger.Info("Value from redis : " + val)
+
+	// initialize appinsights client
+	insightsClient := appinsights.NewTelemetryClient(configs.AzureInstrumentation())
+
+	// track redis call as dependecy trace
+	dependencyTrace := appinsights.NewRemoteDependencyTelemetry("Redis cache dep", "Redis", " 0.0.0.0:6379", true /* success */)
+
+	helpers.CustomLogger.Info("requestId : " + requestId)
+	dependencyTrace.Id = requestId
+	dependencyTrace.Data = "MGET <args>"
+	dependencyTrace.Duration = time.Minute
+	insightsClient.Track(dependencyTrace)
+
+	// call remote api
+	startTime := time.Now()
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", "http://localhost:7000/test-api", nil)
+	if err != nil {
+		helpers.CustomLogger.Error("Error requesting test api : " + err.Error())
+	}
+	req.Header.Add("CorrelationID", requestId)
+	resp, err := client.Do(req)
+	if err != nil {
+		helpers.CustomLogger.Error("Error calling test api : " + err.Error())
+	}
+
+	// track request
+	duration := time.Now().Sub(startTime)
+	requestTrace := appinsights.NewRequestTelemetry("GET", "http://localhost:7000/test-api", duration, resp.Status)
+	requestTrace.Id = requestId
+	requestTrace.Timestamp = time.Now()
+	insightsClient.Track(requestTrace)
+
+	c.JSON(http.StatusOK, responses.UserResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"message": resp.Body}})
+
+}
 
 // This is the api to refresh tokens
 // Most of the code is taken from the jwt-go package's sample codes

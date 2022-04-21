@@ -42,3 +42,12 @@ func EnvPort() string {
 
 	return os.Getenv("PORT")
 }
+
+func AzureInstrumentation() string {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
+	return os.Getenv("INSTRUMENTATION_KEY")
+}
